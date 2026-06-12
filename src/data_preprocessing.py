@@ -181,7 +181,7 @@ class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
         self.missing_ratio_threshold = missing_ratio_threshold
         self.feature_importance_ = {} #contains feature importance of all features
         self.important_feature_ = {} # contains feature importance >= threshold only feature
-        self.total_feature_dropped = 0
+        self.feature_dropped = []
     def filt_important_feature(self, x: pd.DataFrame, y: pd.Series):
         #using lightGBM to get feature_importance
         model = LGBMClassifier(n_estimators=50, random_state= 42, verbose = -1)
@@ -198,20 +198,22 @@ class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
         for feature, feature_importance in self.feature_importance_.items():
             if feature_importance > self.importance_threshold:
                 self.important_feature_[feature] = feature_importance
+        for column in x.columns:
+            if (x[column].isnull().sum() == 0) | (column in self.important_feature_.keys()):
+                continue
+            total_row = len(x)
+            missing_ratio = float(np.round(x[column].isnull().sum() / total_row, 4)) * 100
+            if missing_ratio > self.missing_ratio_threshold:
+                self.feature_dropped.append(column)
         return self
     def transform(self, x):
         if not isinstance(x, pd.DataFrame):
             x = pd.DataFrame(x)
         x = x.copy()
-        for column in x.columns:
-            if (x[column].isnull().sum() == 0) or (column in self.important_feature_.keys()) :
-                continue
-            total_row = len(x)
-            missing_ratio = float(np.round(x[column].isnull().sum() / total_row, 4)) * 100
-            if missing_ratio > self.missing_ratio_threshold:
-                x = x.drop(column, axis = 1)
-                self.total_feature_dropped += 1
-        print(f"Feature dropping completed, data shape; {x.shape}, feature dropped: {self.total_feature_dropped}")
+        for col in self.feature_dropped:
+            if col in x.columns:
+                x = x.drop(col, axis = 1)
+        print(f"Feature dropping completed, data shape; {x.shape}, feature dropped: {len(self.feature_dropped)}")
         return x
 
 # class to automatically scale features based on distribution or outliers

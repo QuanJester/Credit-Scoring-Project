@@ -27,7 +27,7 @@ class TrainingPipeline:
             ('Imputing', AutomaticImputing()),
             ('Feature engineering', FeatureEngineering()),
             ('Scaling', AutomaticScaling()), 
-            ("Model training", LogisticRegression(random_state=42, max_iter= 1000,class_weight="balanced"))
+            ("Model training", LogisticRegression(random_state=42, max_iter= 1500,class_weight="balanced"))
         ])
     def training(self):
         print("Initializing training...")
@@ -42,6 +42,7 @@ class TrainingPipeline:
         print(f"Precision score: {precision} \nRecall score: {recall} \nF1 score: {f1} \nRoc auc: {roc_auc}")
         self.save_pipeline()
         #tracking training with ml flow
+        mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
         with mlflow.start_run(run_name="Test 1: creating new feature (income/credit) - Logistic Regression"):
             # baseline parameters from preprocessing pipeline
