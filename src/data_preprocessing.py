@@ -8,7 +8,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from data_ingestion import DataLoader
 from lightgbm import LGBMClassifier
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
-
+import matplotlib.pyplot as plt
 # class to check missing ratio and classify missing risk in each column (feature)
 class MissingValueTracker:
     def __init__(self, data: pd.DataFrame, missing_risk_threshold: dict = None):
@@ -35,7 +35,34 @@ class MissingValueTracker:
             missing_risk_category[column] = risk_categories[category_idx]
             
         return pd.Series(missing_risk_category)
-        
+# detect outliers
+class Outliers():
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+    def plot_and_detect_outliers(self, column):
+        data = self.df
+        q1 = data[column].quantile(0.25)
+        q3 = data[column].quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        total_outliers = (data[column] < lower_bound or data[column] > upper_bound)
+        print(f"Total outliers detected: {total_outliers}")
+        plt.figure(figsize=(10, 6))
+        # Vẽ giá trị DAYS_EMPLOYED theo số thứ tự dòng (index)
+        plt.scatter(
+            x=data.index, 
+            y=data[column], 
+            alpha=0.5, 
+            c='green', 
+            s=10 # kích thước điểm vẽ
+        )
+
+        plt.title(f"Scatter plot of {column}")
+        plt.xlabel('Index')
+        plt.ylabel(f"{column}")
+        plt.grid(True)
+        plt.show()
 # class to automatically impute missing value based on the feature's distribution
 class AutomaticImputing(BaseEstimator, TransformerMixin):
     def __init__(self, skew_threshold = 0.5):
@@ -229,7 +256,11 @@ class AutomaticScaling(BaseEstimator, TransformerMixin):
             x = pd.DataFrame(x)
         x = x.copy()
         feature_category = SchemaLoading(self.schema_file_path).load_schema()
-        numerical_feature = feature_category['numerical_column']
+        numerical_feature = feature_category['numerical_column'].copy()
+        # Add engineered features if they are in the dataset
+        for col in ['credit_income_ratio', 'income_annuity_ratio', 'birth_employed_ratio', 'credit_goods_ratio']:
+            if col in x.columns and col not in numerical_feature:
+                numerical_feature.append(col)
         for column in numerical_feature:
             if column not in x.columns:
                 continue
