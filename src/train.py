@@ -11,6 +11,7 @@ import joblib
 import mlflow
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
+from sklearn.model_selection import RandomizedSearchCV
 class TrainingPipeline:
     def __init__(self, file_path: str, schema_path: str, model_save_path: str):
         self.file_path = file_path
@@ -23,6 +24,7 @@ class TrainingPipeline:
         y = data['TARGET'].copy()
         x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=test_size, random_state= 42)
         return x_train, x_test, y_train, y_test
+    #function to create training pipeline
     def create_pipeline(self):
         self.pipeline = Pipeline([
             ('Encoding', AutomaticEncoding(schema_filepath= self.schema_path)),
@@ -32,6 +34,7 @@ class TrainingPipeline:
             ('Scaling', AutomaticScaling()), 
             ("Model training", LGBMClassifier(random_state= 42, n_estimators= 200, learning_rate= 0.03, class_weight= "balanced", verbose = -1))
         ])
+    #function to train model on a whole data set
     def training(self):
         print("Initializing training...")
         x_train, x_test, y_train, y_test = self.load_and_split()
@@ -47,7 +50,7 @@ class TrainingPipeline:
         #tracking training with ml flow
         mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
-        with mlflow.start_run(run_name="Test 5: Use class weight: balanced"):
+        with mlflow.start_run(run_name="Test 6"):
             # baseline parameters from preprocessing pipeline
             mlflow.log_param("importance threshold", self.pipeline.named_steps['Feature Dropping'].importance_threshold)
             mlflow.log_param("skew threshold", self.pipeline.named_steps['Imputing'].skew_threshold)
@@ -60,7 +63,7 @@ class TrainingPipeline:
             mlflow.log_metric("recall", recall)
             mlflow.log_metric("f1", f1)
             mlflow.log_metric("roc auc", roc_auc)
-        
+    #function to cross_validate  
     def cross_validate(self, n_splits: int = 5):
         data = DataLoader.load_csv(self.file_path)
         x = data.drop('TARGET', axis = 1).copy()
@@ -106,7 +109,51 @@ class TrainingPipeline:
              mlflow.log_metric("mean recall", recall_mean)
              mlflow.log_metric("mean f1", f1_mean)
              mlflow.log_metric("mean roc auc", roc_mean)
-        
+    #function to tune hyperparameters
+    def full_pipelinehyperparameter_tuning(self):
+        x_train, x_test, y_train, y_test = self.load_and_split()
+        param_dist = {
+            'Feature Dropping__importance_threshold': [0.5, 0.65, 0.7, 0.8],
+            'Imputing__skew_threshold': [0.4, 0.5],
+            'Scaling__outlier_percentage': [1,2,3,4,5],
+            'Model training__n_estimators': [100,150,200,250],
+            'Model training__learning_rate': [0.03,0.05,0.07],
+            'Model training__class_weight': ['balanced']
+        }
+        self.create_pipeline()
+        random_search = RandomizedSearchCV(
+            estimator= self.pipeline, 
+            param_distributions= param_dist, 
+            n_iter= 6, 
+            cv = 3, 
+            scoring= 'roc_auc',
+            n_jobs= -1, 
+            verbose=1
+        )
+        print(f"Tuning hyperparameter...")
+        random_search.fit(x_train, y_train)
+        best_param = random_search.best_params_
+        print(f"Best params: {best_param}")
+        print(f"Best score: {random_search.best_score_:.4f}")
+        self.pipeline = random_search.best_estimator_
+        self.save_pipeline()
+        #testing 
+        prediction = random_search.predict(x_test)
+        predict_proba = random_search.predict_proba(x_test)[:, 1]
+        precision = precision_score(y_test, prediction)
+        recall = recall_score(y_test, prediction)
+        f1 = f1_score(y_test, prediction)
+        roc_auc = roc_auc_score(y_test, predict_proba)
+        mlflow.set_tracking_uri("sqlite:///mlflow.db") 
+        mlflow.set_experiment("Credit Scoring")
+        with mlflow.start_run(run_name="Test 2 (Hyperparameter tuning)"):
+            for param, value in best_param.items():
+                mlflow.log_param(param, value)
+            # metrics score
+            mlflow.log_metric("precision", precision)
+            mlflow.log_metric("recall", recall)
+            mlflow.log_metric("f1", f1)
+            mlflow.log_metric("roc auc", roc_auc)
     def save_pipeline(self):
         joblib.dump(self.pipeline, self.model_save_path)
         print(f"Model saved at {self.model_save_path}")
@@ -118,4 +165,4 @@ if __name__ == "__main__":
         schema_path = "./config/data_schema.json",
         model_save_path= "./models/baseline.pkl"
     )
-    trainer.cross_validate()
+    trainer.full_pipelinehyperparameter_tuning()

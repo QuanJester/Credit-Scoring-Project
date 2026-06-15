@@ -35,34 +35,6 @@ class MissingValueTracker:
             missing_risk_category[column] = risk_categories[category_idx]
             
         return pd.Series(missing_risk_category)
-# detect outliers
-class Outliers():
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-    def plot_and_detect_outliers(self, column):
-        data = self.df
-        q1 = data[column].quantile(0.25)
-        q3 = data[column].quantile(0.75)
-        iqr = q3 - q1
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        total_outliers = (data[column] < lower_bound or data[column] > upper_bound)
-        print(f"Total outliers detected: {total_outliers}")
-        plt.figure(figsize=(10, 6))
-        # Vẽ giá trị DAYS_EMPLOYED theo số thứ tự dòng (index)
-        plt.scatter(
-            x=data.index, 
-            y=data[column], 
-            alpha=0.5, 
-            c='green', 
-            s=10 # kích thước điểm vẽ
-        )
-
-        plt.title(f"Scatter plot of {column}")
-        plt.xlabel('Index')
-        plt.ylabel(f"{column}")
-        plt.grid(True)
-        plt.show()
 # class to automatically impute missing value based on the feature's distribution
 class AutomaticImputing(BaseEstimator, TransformerMixin):
     def __init__(self, skew_threshold = 0.5):
