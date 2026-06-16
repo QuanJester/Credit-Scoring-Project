@@ -12,8 +12,10 @@ import mlflow
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
 from sklearn.model_selection import RandomizedSearchCV
+import matplotlib.pyplot as plt
+import seaborn as sns
 class TrainingPipeline:
-    def __init__(self, file_path: str, schema_path: str, model_save_path: str):
+    def __init__(self, file_path: str, schema_path: str , model_save_path: str ):
         self.file_path = file_path
         self.schema_path = schema_path
         self.pipeline = None 
@@ -28,11 +30,11 @@ class TrainingPipeline:
     def create_pipeline(self):
         self.pipeline = Pipeline([
             ('Encoding', AutomaticEncoding(schema_filepath= self.schema_path)),
-            ('Feature Dropping', AutomaticFeatureDrop(importance_threshold= 0.8)),
+            ('Feature Dropping', AutomaticFeatureDrop(importance_threshold= 0.01)),
             ('Feature engineering', FeatureEngineering()),
             ('Imputing', AutomaticImputing()),
             ('Scaling', AutomaticScaling()), 
-            ("Model training", LGBMClassifier(random_state= 42, n_estimators= 200, learning_rate= 0.03, class_weight= "balanced", verbose = -1))
+            ("Model training", LGBMClassifier(random_state= 42, n_estimators= 250, learning_rate= 0.03, class_weight= "balanced", verbose = -1))
         ])
     #function to train model on a whole data set
     def training(self):
@@ -50,11 +52,11 @@ class TrainingPipeline:
         #tracking training with ml flow
         mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
-        with mlflow.start_run(run_name="Test 6"):
+        with mlflow.start_run(run_name="Test 12: create new feature (high_default_risk)"):
             # baseline parameters from preprocessing pipeline
             mlflow.log_param("importance threshold", self.pipeline.named_steps['Feature Dropping'].importance_threshold)
             mlflow.log_param("skew threshold", self.pipeline.named_steps['Imputing'].skew_threshold)
-            mlflow.log_param("outlier percentage threshold", self.pipeline.named_steps['Scaling'].outlier_percentage)
+            mlflow.log_param("outlier percentage threshold" , self.pipeline.named_steps['Scaling'].outlier_percentage)
             mlflow.log_param("n estimators", self.pipeline.named_steps['Model training'].n_estimators)
             mlflow.log_param("class weight", self.pipeline.named_steps['Model training'].class_weight)
             mlflow.log_param("learning rate", self.pipeline.named_steps['Model training'].learning_rate)
@@ -112,6 +114,7 @@ class TrainingPipeline:
     #function to tune hyperparameters
     def full_pipelinehyperparameter_tuning(self):
         x_train, x_test, y_train, y_test = self.load_and_split()
+        # tuning hyperparameter of preprocessing pipeline
         param_dist = {
             'Feature Dropping__importance_threshold': [0.5, 0.65, 0.7, 0.8],
             'Imputing__skew_threshold': [0.4, 0.5],
@@ -154,10 +157,14 @@ class TrainingPipeline:
             mlflow.log_metric("recall", recall)
             mlflow.log_metric("f1", f1)
             mlflow.log_metric("roc auc", roc_auc)
+        
     def save_pipeline(self):
         joblib.dump(self.pipeline, self.model_save_path)
         print(f"Model saved at {self.model_save_path}")
-        
+
+
+         
+
 
 if __name__ == "__main__":
     trainer = TrainingPipeline(
@@ -165,4 +172,4 @@ if __name__ == "__main__":
         schema_path = "./config/data_schema.json",
         model_save_path= "./models/baseline.pkl"
     )
-    trainer.full_pipelinehyperparameter_tuning()
+    trainer.training()

@@ -37,7 +37,7 @@ class MissingValueTracker:
         return pd.Series(missing_risk_category)
 # class to automatically impute missing value based on the feature's distribution
 class AutomaticImputing(BaseEstimator, TransformerMixin):
-    def __init__(self, skew_threshold = 0.5):
+    def __init__(self, skew_threshold = 0.4):
         self.skew_threshold = skew_threshold
         self.impute_values_ = {}
 
@@ -175,7 +175,7 @@ class SchemaCreating():
 
 # class to automatically drop columns that contain too many missing values
 class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
-    def __init__(self, importance_threshold: float = 0.65, missing_ratio_threshold: float = 50.0):
+    def __init__(self, importance_threshold: float = 0.01, missing_ratio_threshold: float = 50.0):
         self.importance_threshold = importance_threshold
         self.missing_ratio_threshold = missing_ratio_threshold
         self.feature_importance_ = {} #contains feature importance of all features
@@ -189,6 +189,9 @@ class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
         feature_name = x.columns
         for i in range(0, len(feature_name)):
             self.feature_importance_[feature_name[i]] = feature_importance[i] / feature_importance.sum()
+        important_feature = sorted(self.feature_importance_.items(), key=lambda item: item[1], reverse=True)
+        top_10 = [feature for feature, _ in important_feature[:10]]
+        print(f"Top 10 most important feature: {top_10}")
     def fit(self, x, y: None):
         if not isinstance(x, pd.DataFrame):
             x = pd.DataFrame(x)
@@ -204,6 +207,7 @@ class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
             missing_ratio = float(np.round(x[column].isnull().sum() / total_row, 4)) * 100
             if missing_ratio > self.missing_ratio_threshold:
                 self.feature_dropped.append(column)
+        print(f"Feature dropped: {self.feature_dropped}")
         return self
     def transform(self, x):
         if not isinstance(x, pd.DataFrame):
@@ -217,7 +221,7 @@ class AutomaticFeatureDrop(BaseEstimator, TransformerMixin):
 
 # class to automatically scale features based on distribution or outliers
 class AutomaticScaling(BaseEstimator, TransformerMixin):
-    def __init__(self, outlier_percentage: int = 1, schema_file_path: str = "./config/data_schema.json"):
+    def __init__(self, outlier_percentage: int = 3, schema_file_path: str = "./config/data_schema.json"):
         self.feature_scaling_ = {}
         self.skew_threshold = 0.5
         self.outlier_percentage = outlier_percentage
