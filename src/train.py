@@ -14,6 +14,8 @@ import numpy as np
 from sklearn.model_selection import RandomizedSearchCV
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
+
 class TrainingPipeline:
     def __init__(self, file_path: str, schema_path: str , model_save_path: str ):
         self.file_path = file_path
@@ -22,9 +24,14 @@ class TrainingPipeline:
         self.model_save_path = model_save_path
     def load_and_split(self, test_size: float = 0.2):
         data = DataLoader.load_csv(self.file_path)
+        
+        # Merge auxiliary datasets dynamically using parent folder of file_path
+        raw_data_dir = str(Path(self.file_path).parent)
+        data = DataLoader.merge_auxiliary_data(data, raw_data_dir)
+        
         x = data.drop('TARGET', axis = 1).copy()
         y = data['TARGET'].copy()
-        x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=test_size, random_state= 42)
+        x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=test_size, random_state= 42, stratify=y)
         return x_train, x_test, y_train, y_test
     #function to create training pipeline
     def create_pipeline(self):
@@ -52,7 +59,7 @@ class TrainingPipeline:
         #tracking training with ml flow
         mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
-        with mlflow.start_run(run_name="Test 12: create new feature (high_default_risk)"):
+        with mlflow.start_run(run_name="Test 13: create new features (payment_rate, ext_std, high_default_risk) and merge datasets"):
             # baseline parameters from preprocessing pipeline
             mlflow.log_param("importance threshold", self.pipeline.named_steps['Feature Dropping'].importance_threshold)
             mlflow.log_param("skew threshold", self.pipeline.named_steps['Imputing'].skew_threshold)
@@ -68,6 +75,11 @@ class TrainingPipeline:
     #function to cross_validate  
     def cross_validate(self, n_splits: int = 5):
         data = DataLoader.load_csv(self.file_path)
+        
+        # Merge auxiliary datasets dynamically
+        raw_data_dir = str(Path(self.file_path).parent)
+        data = DataLoader.merge_auxiliary_data(data, raw_data_dir)
+        
         x = data.drop('TARGET', axis = 1).copy()
         y = data['TARGET'].copy()
         precision_list = []
@@ -97,7 +109,7 @@ class TrainingPipeline:
         roc_mean = np.mean(roc_list)
         mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
-        with mlflow.start_run(run_name="Test 1 (Cross validate)"):
+        with mlflow.start_run(run_name="Test 2 (Cross validate with merged data)"):
              # parameters
              mlflow.log_param("importance threshold", self.pipeline.named_steps['Feature Dropping'].importance_threshold)
              mlflow.log_param("skew threshold", self.pipeline.named_steps['Imputing'].skew_threshold)
@@ -116,7 +128,8 @@ class TrainingPipeline:
         x_train, x_test, y_train, y_test = self.load_and_split()
         # tuning hyperparameter of preprocessing pipeline
         param_dist = {
-            'Feature Dropping__importance_threshold': [0.5, 0.65, 0.7, 0.8],
+            # Corrected tuning search space to prevent dropping important features
+            'Feature Dropping__importance_threshold': [0.005, 0.01, 0.015, 0.02],
             'Imputing__skew_threshold': [0.4, 0.5],
             'Scaling__outlier_percentage': [1,2,3,4,5],
             'Model training__n_estimators': [100,150,200,250],
@@ -127,7 +140,7 @@ class TrainingPipeline:
         random_search = RandomizedSearchCV(
             estimator= self.pipeline, 
             param_distributions= param_dist, 
-            n_iter= 6, 
+            n_iter= 5, 
             cv = 3, 
             scoring= 'roc_auc',
             n_jobs= -1, 
@@ -149,7 +162,7 @@ class TrainingPipeline:
         roc_auc = roc_auc_score(y_test, predict_proba)
         mlflow.set_tracking_uri("sqlite:///mlflow.db") 
         mlflow.set_experiment("Credit Scoring")
-        with mlflow.start_run(run_name="Test 2 (Hyperparameter tuning)"):
+        with mlflow.start_run(run_name="Test 3 (Hyperparameter tuning)"):
             for param, value in best_param.items():
                 mlflow.log_param(param, value)
             # metrics score
@@ -168,8 +181,8 @@ class TrainingPipeline:
 
 if __name__ == "__main__":
     trainer = TrainingPipeline(
-        file_path= "./raw_data/application_train.csv",
-        schema_path = "./config/data_schema.json",
-        model_save_path= "./models/baseline.pkl"
+        file_path= "./raw_data/data_merged.csv",
+        schema_path = "./config/data_schema_full.json",
+        model_save_path= "./models/full.pkl"
     )
     trainer.training()

@@ -28,7 +28,14 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         ext_cols = ['EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3']
         x['EXT_mean'] = x[ext_cols].mean(skipna=True, axis= 1)
         x['high_default_risk'] = np.where(x['EXT_mean'].isnull(), np.nan, (x['EXT_mean'] <= 0.439).astype(float))
-        new_cols = ['credit_income_ratio', 'income_annuity_ratio', 'birth_employed_ratio', 'credit_goods_ratio', 'EXT_mean', 'high_default_risk']
+        
+        #deal with own car age missing value
+        x['OWN_CAR_AGE'] = x['OWN_CAR_AGE'].fillna(-1)
+        x['ext_std'] = np.std(x[ext_cols])
+        x['payment_rate'] = x['AMT_ANNUITY'] / x['AMT_CREDIT']
+        x['retired_or_unemployed'] = (x['DAYS_EMPLOYED'] == 365243).astype(float)
+        x['DAYS_EMPLOYED'] = x['DAYS_EMPLOYED'].replace(365243, np.nan)
+        new_cols = ['retired_or_unemployed', 'payment_rate','ext_std','credit_income_ratio', 'income_annuity_ratio', 'birth_employed_ratio', 'credit_goods_ratio', 'EXT_mean', 'high_default_risk']
         for cols in new_cols:
             x[cols] = x[cols].replace([np.inf, -np.inf], np.nan)
         print(f"New features created: {new_cols}")
